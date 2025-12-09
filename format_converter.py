@@ -6,6 +6,27 @@ INPUT_FILE = "eindhoven.osm.pbf"
 NODES_OUTPUT = "nodes.csv"
 EDGES_OUTPUT = "edges.csv"
 
+# Default speeds (km/h) by OSM highway type for travel-time weighting
+DEFAULT_SPEED_KMH = {
+    "motorway": 110,
+    "motorway_link": 70,
+    "trunk": 90,
+    "trunk_link": 70,
+    "primary": 70,
+    "primary_link": 60,
+    "secondary": 60,
+    "secondary_link": 50,
+    "tertiary": 50,
+    "tertiary_link": 40,
+    "unclassified": 40,
+    "residential": 30,
+    "living_street": 10,
+    "service": 20,
+    "cycleway": 20,
+    "path": 10,
+}
+DEFAULT_FALLBACK_KMH = 50  # Used when no tag-based speed is available
+
 def haversine(lon1, lat1, lon2, lat2):
     """Calculates distance in meters between two coordinates."""
     R = 6371000 
@@ -14,6 +35,50 @@ def haversine(lon1, lat1, lon2, lat2):
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2) * math.sin(dlambda/2)**2
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _parse_maxspeed(value):
+    """Parse OSM maxspeed tag into meters/second, return None if unknown."""
+    if not value:
+        return None
+    txt = value.strip().lower()
+    if txt == "none":
+        return None
+
+    # mph handling
+    if txt.endswith("mph"):
+        num_txt = txt.replace("mph", "").strip()
+        try:
+            mph = float(num_txt)
+            return mph * 0.44704  # mph -> m/s
+        except ValueError:
+            return None
+
+    # km/h or bare number
+    for token in ("km/h", "kph", "kmh"):
+        txt = txt.replace(token, "")
+    try:
+        kmh = float(txt.strip())
+        return kmh / 3.6  # km/h -> m/s
+    except ValueError:
+        return None
+
+
+def estimate_speed_mps(tags):
+    """Estimate speed (m/s) from maxspeed tag or highway type."""
+    # 1) Explicit maxspeed if present
+    maxspeed_raw = tags.get('maxspeed')
+    speed = _parse_maxspeed(maxspeed_raw)
+    if speed:
+        return speed
+
+    # 2) Highway-based defaults
+    highway = tags.get('highway')
+    if highway in DEFAULT_SPEED_KMH:
+        return DEFAULT_SPEED_KMH[highway] / 3.6
+
+    # 3) Fallback
+    return DEFAULT_FALLBACK_KMH / 3.6
 
 class GraphWriter(osmium.SimpleHandler):
     def __init__(self, n_writer, e_writer):
@@ -57,15 +122,17 @@ class GraphWriter(osmium.SimpleHandler):
                 u = self.get_or_create_node(start_node)
                 v = self.get_or_create_node(end_node)
                 
-                # 2. Calculate Weight
+                # 2. Calculate Weight (travel time in seconds)
                 dist = haversine(start_node.lon, start_node.lat, end_node.lon, end_node.lat)
+                speed = estimate_speed_mps(w.tags)
+                weight = dist / speed if speed else dist / (50/3.6)  # fallback to distance if speed missing
                 
                 # 3. Write Edge: "source,target,weight"
-                self.e_writer.write(f"{u},{v},{dist:.2f}\n")
+                self.e_writer.write(f"{u},{v},{weight:.2f}\n")
                 
                 # 4. Handle Bidirectional Roads
                 if w.tags.get('oneway') != 'yes':
-                    self.e_writer.write(f"{v},{u},{dist:.2f}\n")
+                    self.e_writer.write(f"{v},{u},{weight:.2f}\n")
                     
             except osmium.InvalidLocationError:
                 # Sometimes PBF data is incomplete for a specific node
@@ -76,7 +143,7 @@ print("Processing PBF...")
 with open(NODES_OUTPUT, 'w') as nf, open(EDGES_OUTPUT, 'w') as ef:
     # Headers
     nf.write("id,lat,lon\n")
-    ef.write("source,target,weight\n")
+    ef.write("source,target,weight\n")  # weight = travel time (seconds)
     
     writer = GraphWriter(nf, ef)
     # locations=True is CRITICAL: it caches coords so w.nodes[i].lat works
