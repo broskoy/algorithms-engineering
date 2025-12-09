@@ -1,0 +1,26 @@
+Converter
+> check converter
+> weight includes max speed
+
+
+Data Structure
+> make a function for building slow one
+> make faster version
+
+
+Dijkstra
+> implement n^2 algorithm
+> implement nlogn
+
+
+Precompute (missing)
+> 
+>
+>
+> 
+
+
+Test Cases
+> add a list of start and end nodes
+> compiler settings
+> 
