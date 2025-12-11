@@ -1,13 +1,12 @@
 const std = @import("std");
 
-pub fn FibonacciHeap(comptime T: type) type {
+pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) type {
     return struct {
         const Self = @This();
 
         const Node = struct {
             key: T,
             degree: usize = 0,
-            mark: bool = false,
             parent: ?*Node = null,
             child: ?*Node = null,
             left: *Node = undefined,  // circular doubly linked list
@@ -28,8 +27,36 @@ pub fn FibonacciHeap(comptime T: type) type {
             };
         }
 
-        inline fn lt(a: T, b: T) bool {
-            return a < b;
+        const lt = lt_fn orelse
+            struct {
+                inline fn f(a: T, b: T) bool {
+                    return a < b;
+                }
+            }.f;
+
+        pub fn format_with_depth(self: *Node, w: *std.io.Writer, depth: usize) !void {
+            try w.splatByteAll('\t', depth);
+            if (self.child) |c| {
+                try w.print("{}: {{\n", .{self.key});
+
+                try format_with_depth(c, w, depth + 1);
+                var cc = c.right;
+                while (cc != c) : (cc = cc.right) {
+                    try format_with_depth(cc, w, depth + 1);
+                }
+
+                try w.splatByteAll('\t', depth);
+                try w.writeAll("}\n");
+            } else try w.print("{}\n", .{self.key});
+        }
+        pub fn format(self: @This(), w: *std.io.Writer) !void {
+            if (self.min) |m| {
+                try format_with_depth(m, w, 0);
+                var c = m.right;
+                while (c != m) : (c = c.right) {
+                    try format_with_depth(c, w, 0);
+                }
+            } else return w.writeAll("<empty>\n");
         }
 
         fn makeNode(self: *Self, key: T) !*Node {
@@ -37,7 +64,6 @@ pub fn FibonacciHeap(comptime T: type) type {
             node.* = .{
                 .key = key,
                 .degree = 0,
-                .mark = false,
                 .parent = null,
                 .child = null,
                 .left = undefined,
@@ -58,7 +84,6 @@ pub fn FibonacciHeap(comptime T: type) type {
 
         fn addChild(parent: *Node, child: *Node) void {
             child.parent = parent;
-            child.mark = false;
 
             if (parent.child) |c| {
                 // insert into child's circular list
@@ -92,29 +117,15 @@ pub fn FibonacciHeap(comptime T: type) type {
         }
 
         pub fn extractMin(self: *Self) !?T {
-            const z_opt = self.min;
-            if (z_opt == null) return null;
-
-            const z = z_opt.?;
+            const z = self.min orelse return null;
 
             // 1. Add z's children to the root list
             if (z.child) |child_start| {
-                var child = child_start;
-                while (true) {
-                    const next = child.right;
-
-                    // detach from sibling list
-                    child.left.right = child.right;
-                    child.right.left = child.left;
-
-                    // add to root list
-                    child.parent = null;
-                    self.addToRootList(child);
-
-                    if (next == child_start) break;
-                    child = next;
-                }
-                z.child = null;
+                const child_end = child_start.left;
+                z.left.right = child_start;
+                child_start.left = z.left;
+                z.left = child_end;
+                child_end.right = z;
             }
 
             // 2. Remove z from root list
@@ -124,32 +135,31 @@ pub fn FibonacciHeap(comptime T: type) type {
             if (z == z.right) {
                 self.min = null;
             } else {
-                self.min = z.right;
+                self.min = z.right; // not necessarily the min, but that will be fixed
                 try self.consolidate();
             }
 
             self.n -= 1;
             const result = z.key;
-
-            // optional: free the node itself
             self.allocator.destroy(z);
 
             return result;
         }
 
+        /// Reduces to number of trees, until each root has a unique degree, self.min can point to any root before call, after it will point to the minimum
         fn consolidate(self: *Self) !void {
-            var A: [MaxDegree]?*Node = undefined;
-            for (&A) |*slot| slot.* = null;
+            if (self.min == null) return;
+            //MaxDEgree is floor(2*log(n))
+            var A: [MaxDegree]?*Node = .{null} ** MaxDegree;
+            var roots: std.ArrayList(*Node) = .empty;
+            defer roots.deinit(self.allocator);
 
-            var roots = std.ArrayList(*Node).init(self.allocator);
-            defer roots.deinit();
-
-            if (self.min) |start| {
-                var x = start;
+            {
+                var x = self.min.?;
                 while (true) {
-                    try roots.append(x);
+                    try roots.append(self.allocator, x);
                     x = x.right;
-                    if (x == start) break;
+                    if (x == self.min.?) break;
                 }
             }
 
@@ -158,12 +168,10 @@ pub fn FibonacciHeap(comptime T: type) type {
                 var x = w;
                 var d = x.degree;
 
-                while (A[d]) |y| {
-                    if (lt(y.key, x.key)) {
-                        const tmp = x;
-                        x = y;
-                        _ = tmp; // just for clarity; swapping handled above
-                    }
+                while (A[d]) |w2| {
+                    var y = w2;
+                    if (lt(y.key, x.key))
+                        std.mem.swap(*Node, &x, &y);
 
                     // Remove y from root list
                     y.left.right = y.right;
@@ -182,18 +190,16 @@ pub fn FibonacciHeap(comptime T: type) type {
             self.min = null;
             for (A) |maybe_x| {
                 if (maybe_x) |x| {
-                    // make x a singleton circular list
-                    x.left = x;
-                    x.right = x;
-                    x.parent = null;
-
-                    if (self.min == null) {
-                        self.min = x;
-                    } else {
+                    if (self.min) |min| {
                         self.addToRootList(x);
-                        if (lt(x.key, self.min.?.key)) {
+                        if (lt(x.key, min.key)) {
                             self.min = x;
                         }
+                    } else {
+                        x.left = x;
+                        x.right = x;
+                        x.parent = null;
+                        self.min = x;
                     }
                 }
             }
@@ -209,23 +215,21 @@ pub fn FibonacciHeap(comptime T: type) type {
 // Example usage
 // ------------------------
 pub fn main() !void {
-    const std = @import("std");
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
-    var Heap = FibonacciHeap(i32);
+    const Heap = FibonacciHeap(i32, null);
     var heap = Heap.init(allocator);
 
-    _ = try heap.insert(10);
-    _ = try heap.insert(3);
     _ = try heap.insert(15);
+    _ = try heap.insert(21);
+    _ = try heap.insert(3);
+    _ = try heap.insert(9);
     _ = try heap.insert(6);
-
-    const stdout = std.io.getStdOut().writer();
 
     while (!heap.isEmpty()) {
         const m = (try heap.extractMin()).?;
-        try stdout.print("Extracted: {d}\n", .{m});
+        std.debug.print("Extracted: {d}\n", .{m});
     }
 }
