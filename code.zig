@@ -25,7 +25,7 @@ pub fn main() !void {
     _ = try reader.interface.discardDelimiterInclusive('\n');
 
     std.debug.print("started reading\n", .{});
-    const start_time = std.time.nanoTimestamp();
+    var start_time = std.time.nanoTimestamp();
     while (true) {
         var string = reader.interface.peekDelimiterExclusive(',') catch |err| switch (err) {
             error.EndOfStream => break,
@@ -41,16 +41,22 @@ pub fn main() !void {
         reader.interface.toss(string.len + 1);
         data[from].append(.{ .node = to, .weight = weight });
     }
-    const a: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    var a: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
     std.debug.print("finished reading {}\n", .{a / 1_000_000});
 
-    const path = try dijkstra(true, std.heap.smp_allocator, 100, 200);
-    defer if (path) |p| std.heap.smp_allocator.free(p);
-
-    std.debug.print("{any}", .{path});
+    inline for ([2]bool{ false, true }) |fib| {
+        start_time = std.time.nanoTimestamp();
+        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
+            std.debug.print("no path :(\n", .{});
+            return;
+        };
+        defer std.heap.smp_allocator.free(path);
+        a = @floatFromInt(std.time.nanoTimestamp() - start_time);
+        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, a / 1_000_000 });
+    }
 }
 
-pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?[]u32 {
+pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?struct { []u32, f32 } {
     assert(from != to);
     const T = struct {
         cost: f32,
@@ -80,7 +86,7 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
             try path.append(allocator, from);
             std.mem.reverse(u32, path.items);
 
-            return try path.toOwnedSlice(allocator);
+            return .{ try path.toOwnedSlice(allocator), e.cost };
         }
         const gop = try visited_from.getOrPut(e.id);
         if (gop.found_existing) continue;
@@ -92,4 +98,3 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
     }
     return null;
 }
-
