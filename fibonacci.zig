@@ -26,6 +26,28 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
                 .n = 0,
             };
         }
+        pub fn deinit(self: *@This()) void {
+            var n = self.min orelse return;
+            while (true) {
+                if (n.child) |c| {
+                    n = c;
+                    continue;
+                }
+                const v = n.*;
+                if (n != n.right) {
+                    self.allocator.destroy(n);
+                    v.left.right = v.right;
+                    v.right.left = v.left;
+                    n = v.right;
+
+                    continue;
+                }
+
+                self.allocator.destroy(n);
+                n = v.parent orelse return;
+                continue;
+            }
+        }
 
         const lt = lt_fn orelse
             struct {
@@ -221,6 +243,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     const Heap = FibonacciHeap(i32, null);
     var heap = Heap.init(allocator);
+    defer heap.deinit();
 
     _ = try heap.insert(15);
     _ = try heap.insert(21);
