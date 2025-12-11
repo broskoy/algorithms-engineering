@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) type {
+pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare: fn (ctx: Context, a: T, b: T) std.math.Order) type {
     return struct {
         const Self = @This();
 
@@ -14,14 +14,16 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
         };
 
         allocator: std.mem.Allocator,
+        context: Context,
         min: ?*Node = null,
         n: usize = 0,
 
         const MaxDegree = 64; // supports absolutely massive heaps
 
-        pub fn init(allocator: std.mem.Allocator) Self {
+        pub fn init(allocator: std.mem.Allocator, context: Context) Self {
             return .{
                 .allocator = allocator,
+                .context = context,
                 .min = null,
                 .n = 0,
             };
@@ -48,13 +50,6 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
                 continue;
             }
         }
-
-        const lt = lt_fn orelse
-            struct {
-                inline fn f(a: T, b: T) bool {
-                    return a < b;
-                }
-            }.f;
 
         pub fn format_with_depth(self: *Node, w: *std.io.Writer, depth: usize) !void {
             try w.splatByteAll('\t', depth);
@@ -122,14 +117,14 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
             parent.degree += 1;
         }
 
-        pub fn insert(self: *Self, key: T) !*Node {
+        pub fn add(self: *Self, key: T) !*Node {
             const node = try self.makeNode(key);
 
             if (self.min == null) {
                 self.min = node;
             } else {
                 self.addToRootList(node);
-                if (lt(node.key, self.min.?.key)) {
+                if (compare(self.context, node.key, self.min.?.key) == .lt) {
                     self.min = node;
                 }
             }
@@ -138,7 +133,7 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
             return node;
         }
 
-        pub fn extractMin(self: *Self) !?T {
+        pub fn removeOrNull(self: *Self) !?T {
             const z = self.min orelse return null;
 
             // 1. Add z's children to the root list
@@ -192,7 +187,7 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
 
                 while (A[d]) |w2| {
                     var y = w2;
-                    if (lt(y.key, x.key))
+                    if (compare(self.context, y.key, x.key) == .lt)
                         std.mem.swap(*Node, &x, &y);
 
                     // Remove y from root list
@@ -214,7 +209,7 @@ pub fn FibonacciHeap(comptime T: type, comptime lt_fn: ?fn (a: T, b: T) bool) ty
                 if (maybe_x) |x| {
                     if (self.min) |min| {
                         self.addToRootList(x);
-                        if (lt(x.key, min.key)) {
+                        if (compare(self.context, x.key, min.key) == .lt) {
                             self.min = x;
                         }
                     } else {
@@ -241,18 +236,22 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
-    const Heap = FibonacciHeap(i32, null);
-    var heap = Heap.init(allocator);
+    const Heap = FibonacciHeap(i32, void, struct {
+        fn f(_: void, a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.f);
+    var heap = Heap.init(allocator, {});
     defer heap.deinit();
 
-    _ = try heap.insert(15);
-    _ = try heap.insert(21);
-    _ = try heap.insert(3);
-    _ = try heap.insert(9);
-    _ = try heap.insert(6);
+    _ = try heap.add(15);
+    _ = try heap.add(21);
+    _ = try heap.add(3);
+    _ = try heap.add(9);
+    _ = try heap.add(6);
 
     while (!heap.isEmpty()) {
-        const m = (try heap.extractMin()).?;
+        const m = (try heap.removeOrNull()).?;
         std.debug.print("Extracted: {d}\n", .{m});
     }
 }
