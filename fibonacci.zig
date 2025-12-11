@@ -9,7 +9,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             degree: usize = 0,
             parent: ?*Node = null,
             child: ?*Node = null,
-            left: *Node = undefined,  // circular doubly linked list
+            left: *Node = undefined, // circular doubly linked list
             right: *Node = undefined,
         };
 
@@ -254,4 +254,77 @@ pub fn main() !void {
         const m = (try heap.removeOrNull()).?;
         std.debug.print("Extracted: {d}\n", .{m});
     }
+}
+
+test "extracts min in order (small)" {
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    defer _ = gpa.deinit();
+
+    const allocator = gpa.allocator();
+    const Heap = FibonacciHeap(i32, void, struct {
+        fn f(_: void, a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.f);
+    var heap = Heap.init(allocator, {});
+    defer heap.deinit();
+
+    _ = try heap.add(15);
+    _ = try heap.add(21);
+    _ = try heap.add(3);
+    _ = try heap.add(9);
+    _ = try heap.add(6);
+
+    var expected: [_]i32 = .{ 3, 6, 9, 15, 21 };
+    var idx: usize = 0;
+    while (!heap.isEmpty()) {
+        const m = (try heap.removeOrNull()).?;
+        std.testing.expectEqual(i32, m, expected[idx]);
+        idx += 1;
+    }
+    std.testing.expectEqual(usize, idx, expected.len);
+}
+
+test "removeOrNull returns null on empty" {
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    defer _ = gpa.deinit();
+
+    const allocator = gpa.allocator();
+    const Heap = FibonacciHeap(i32, void, struct {
+        fn f(_: void, a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.f);
+    var heap = Heap.init(allocator, {});
+    defer heap.deinit();
+
+    const res = try heap.removeOrNull();
+    std.testing.expect(res == null);
+}
+
+test "descending inserts extract ascending 1..100" {
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    defer _ = gpa.deinit();
+
+    const allocator = gpa.allocator();
+    const Heap = FibonacciHeap(i32, void, struct {
+        fn f(_: void, a: i32, b: i32) std.math.Order {
+            return std.math.order(a, b);
+        }
+    }.f);
+    var heap = Heap.init(allocator, {});
+    defer heap.deinit();
+
+    var i: i32 = 100;
+    while (i >= 1) : (i -= 1) {
+        _ = try heap.add(i);
+    }
+
+    var expected: i32 = 1;
+    while (!heap.isEmpty()) {
+        const m = (try heap.removeOrNull()).?;
+        std.testing.expectEqual(i32, m, expected);
+        expected += 1;
+    }
+    std.testing.expectEqual(i32, expected, 101);
 }
