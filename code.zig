@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const NUMBER_OF_EDGES = 1_700_000;
+const NUMBER_OF_NODES = 1_700_000;
 const MAX_EDGE_COUNT = 9;
 const Entry = struct { node: u32, weight: f32 };
 const Row = struct {
@@ -16,7 +16,7 @@ const Row = struct {
     }
 };
 
-var data: [NUMBER_OF_EDGES]Row = .{Row{}} ** NUMBER_OF_EDGES;
+var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
 pub fn main() !void {
     const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
     defer f.close();
@@ -25,7 +25,7 @@ pub fn main() !void {
     _ = try reader.interface.discardDelimiterInclusive('\n');
 
     std.debug.print("started reading\n", .{});
-    const start_time = std.time.nanoTimestamp();
+    var start_time = std.time.nanoTimestamp();
     while (true) {
         var string = reader.interface.peekDelimiterExclusive(',') catch |err| switch (err) {
             error.EndOfStream => break,
@@ -41,11 +41,22 @@ pub fn main() !void {
         reader.interface.toss(string.len + 1);
         data[from].append(.{ .node = to, .weight = weight });
     }
-    const a: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
-    std.debug.print("finished reading {}", .{a / 1_000_000});
+    var a: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    std.debug.print("finished reading {}\n", .{a / 1_000_000});
+
+    inline for ([2]bool{ false, true }) |fib| {
+        start_time = std.time.nanoTimestamp();
+        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
+            std.debug.print("no path :(\n", .{});
+            return;
+        };
+        defer std.heap.smp_allocator.free(path);
+        a = @floatFromInt(std.time.nanoTimestamp() - start_time);
+        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, a / 1_000_000 });
+    }
 }
 
-pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?[]u32 {
+pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?struct { []u32, f32 } {
     assert(from != to);
     const T = struct {
         cost: f32,
@@ -56,12 +67,12 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
         }
     };
     var pq: (if (fib) @import("fibonacci.zig").FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
-    defer pq.deinit();
+    //defer pq.deinit();
     var visited_from: std.AutoHashMap(u32, u32) = .init(allocator);
     defer visited_from.deinit();
 
     try pq.add(.{ .cost = 0, .id = from, .prev = undefined });
-    while (pq.removeOrNull()) |e| {
+    while (if (fib) try pq.removeOrNull() else pq.removeOrNull()) |e| {
         if (e.id == to) {
             var path: std.ArrayList(u32) = .empty;
             errdefer path.deinit(allocator);
@@ -75,7 +86,7 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
             try path.append(allocator, from);
             std.mem.reverse(u32, path.items);
 
-            return path.toOwnedSlice(allocator);
+            return .{ try path.toOwnedSlice(allocator), e.cost };
         }
         const gop = try visited_from.getOrPut(e.id);
         if (gop.found_existing) continue;
@@ -87,4 +98,3 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
     }
     return null;
 }
-
