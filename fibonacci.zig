@@ -274,14 +274,14 @@ test "extracts min in order (small)" {
     _ = try heap.add(9);
     _ = try heap.add(6);
 
-    var expected: [_]i32 = .{ 3, 6, 9, 15, 21 };
+    const expected: [5]i32 = .{ 3, 6, 9, 15, 21 };
     var idx: usize = 0;
     while (!heap.isEmpty()) {
         const m = (try heap.removeOrNull()).?;
-        std.testing.expectEqual(i32, m, expected[idx]);
+        try std.testing.expectEqual(expected[idx], m);
         idx += 1;
     }
-    std.testing.expectEqual(usize, idx, expected.len);
+    try std.testing.expectEqual(expected.len, idx);
 }
 
 test "removeOrNull returns null on empty" {
@@ -298,7 +298,7 @@ test "removeOrNull returns null on empty" {
     defer heap.deinit();
 
     const res = try heap.removeOrNull();
-    std.testing.expect(res == null);
+    try std.testing.expect(res == null);
 }
 
 test "descending inserts extract ascending 1..100" {
@@ -322,8 +322,8 @@ test "descending inserts extract ascending 1..100" {
     var expected: i32 = 1;
     while (!heap.isEmpty()) {
         const m = (try heap.removeOrNull()).?;
-        std.testing.expectEqual(i32, m, expected);
+        try std.testing.expectEqual(expected, m);
         expected += 1;
     }
-    std.testing.expectEqual(i32, expected, 101);
+    try std.testing.expectEqual(101, expected);
 }
