@@ -117,7 +117,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             parent.degree += 1;
         }
 
-        pub fn add(self: *Self, key: T) !*Node {
+        pub fn add(self: *Self, key: T) !void {
             const node = try self.makeNode(key);
 
             if (self.min == null) {
@@ -130,7 +130,6 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             }
 
             self.n += 1;
-            return node;
         }
 
         pub fn removeOrNull(self: *Self) !?T {
