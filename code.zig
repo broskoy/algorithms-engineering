@@ -45,7 +45,7 @@ pub fn main() !void {
     std.debug.print("finished reading {}", .{a / 1_000_000});
 }
 
-pub fn dijkstra(allocator: std.mem.Allocator, from: u32, to: u32) !?[]u32 {
+pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?[]u32 {
     assert(from != to);
     const T = struct {
         cost: f32,
@@ -55,7 +55,7 @@ pub fn dijkstra(allocator: std.mem.Allocator, from: u32, to: u32) !?[]u32 {
             return std.math.order(a.cost, b.cost);
         }
     };
-    var pq: std.PriorityQueue(T, void, T.compareFn) = .init(allocator, {});
+    var pq: (if (fib) @import("fibonacci.zig").FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
     defer pq.deinit();
     var visited_from: std.AutoHashMap(u32, u32) = .init(allocator);
     defer visited_from.deinit();
