@@ -1,22 +1,23 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-const NUMBER_OF_NODES = 1_700_000;
-const MAX_EDGE_COUNT = 9;
+const NUMBER_OF_NODES = 180000;
+const MAX_EDGE_COUNT = 7;
 const Entry = struct { node: u32, weight: f32 };
 const Row = struct {
-    count: usize = 0,
-    items: [MAX_EDGE_COUNT]Entry = undefined,
+    from: usize = 0,
+    to: [MAX_EDGE_COUNT]Entry = undefined,
     pub inline fn append(self: *@This(), entry: Entry) void {
-        self.items[self.count] = entry;
-        self.count += 1;
+        self.to[self.from] = entry;
+        self.from += 1;
     }
     pub inline fn slice(self: *@This()) []Entry {
-        return self.items[0..self.count];
+        return self.to[0..self.from];
     }
 };
 
 var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
+
 pub fn main() !void {
     const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
     defer f.close();
