@@ -21,8 +21,8 @@ var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
 pub fn main() !void {
     const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
     defer f.close();
-    var reader_buf: [4096]u8 = undefined;
-    var reader: std.fs.File.Reader = f.reader(&reader_buf);
+    var reader_buffer: [4096]u8 = undefined;
+    var reader: std.fs.File.Reader = f.reader(&reader_buffer);
     _ = try reader.interface.discardDelimiterInclusive('\n');
 
     std.debug.print("started reading\n", .{});
@@ -42,8 +42,8 @@ pub fn main() !void {
         reader.interface.toss(string.len + 1);
         data[from].append(.{ .node = to, .weight = weight });
     }
-    var a: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
-    std.debug.print("finished reading {}\n", .{a / 1_000_000});
+    const read_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    std.debug.print("finished reading {}\n", .{read_time / 1_000_000});
 
     inline for ([2]bool{ false, true }) |fib| {
         start_time = std.time.nanoTimestamp();
@@ -52,8 +52,8 @@ pub fn main() !void {
             return;
         };
         defer std.heap.smp_allocator.free(path);
-        a = @floatFromInt(std.time.nanoTimestamp() - start_time);
-        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, a / 1_000_000 });
+        const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, run_time / 1_000_000 });
     }
 }
 

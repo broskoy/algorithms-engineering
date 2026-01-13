@@ -21,6 +21,7 @@ pub fn main() !void {
     var degrees = try allocator.alloc(u8, NUMBER_OF_NODES);
     @memset(degrees, 0);
 
+    // declaring variables
     var max_node_degree: u8 = 0;
     var max_degree_id: u32 = 0;
     var max_node_id: u32 = 0;
