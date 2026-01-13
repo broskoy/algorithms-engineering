@@ -1,0 +1,105 @@
+const std = @import("std");
+const assert = std.debug.assert;
+
+const NUMBER_OF_NODES = 180000;
+const MAX_DEGREE = 7;
+const Entry = struct { node: u32, weight: f32 };
+const Row = struct {
+    size: u32 = 0,
+    to: [MAX_DEGREE]Entry = undefined,
+    pub inline fn append(self: *@This(), entry: Entry) void {
+        self.to[self.size] = entry;
+        self.size += 1;
+    }
+    pub inline fn slice(self: *@This()) []Entry {
+        return self.to[0..self.size];
+    }
+};
+
+var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
+
+pub fn main() !void {
+    create_graph();
+
+    inline for ([2]bool{ false, true }) |fib| {
+        const start_time = std.time.nanoTimestamp();
+        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
+            std.debug.print("no path :(\n", .{});
+            return;
+        };
+        defer std.heap.smp_allocator.free(path);
+        const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, run_time / 1_000_000 });
+    }
+}
+
+fn create_graph() !void {
+    const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
+    defer f.close();
+    var reader_buffer: [4096]u8 = undefined;
+    var reader: std.fs.File.Reader = f.reader(&reader_buffer);
+    _ = try reader.interface.discardDelimiterInclusive('\n');
+
+    std.debug.print("started reading\n", .{});
+    const start_time = std.time.nanoTimestamp();
+    while (true) {
+        var string = reader.interface.peekDelimiterExclusive(',') catch |err| switch (err) {
+            error.EndOfStream => break,
+            else => |e| return e,
+        };
+        const from = try std.fmt.parseInt(u32, string, 10);
+        reader.interface.toss(string.len + 1);
+        string = try reader.interface.peekDelimiterExclusive(',');
+        const to = try std.fmt.parseInt(u32, string, 10);
+        reader.interface.toss(string.len + 1);
+        string = try reader.interface.peekDelimiterExclusive('\n');
+        const weight = try std.fmt.parseFloat(f32, string);
+        reader.interface.toss(string.len + 1);
+        data[from].append(.{ .node = to, .weight = weight });
+    }
+    const read_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    std.debug.print("finished reading {}\n", .{read_time / 1_000_000});
+}
+
+pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?struct { []u32, f32 } {
+    assert(from != to);
+    const T = struct {
+        cost: f32,
+        id: u32,
+        prev: u32,
+        fn compareFn(_: void, a: @This(), b: @This()) std.math.Order {
+            return std.math.order(a.cost, b.cost);
+        }
+    };
+    var pq: (if (fib) @import("fibonacci.zig").FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
+    //defer pq.deinit();
+    var visited_from: std.AutoHashMap(u32, u32) = .init(allocator);
+    defer visited_from.deinit();
+
+    try pq.add(.{ .cost = 0, .id = from, .prev = undefined });
+    while (if (fib) try pq.removeOrNull() else pq.removeOrNull()) |e| {
+        if (e.id == to) {
+            var path: std.ArrayList(u32) = .empty;
+            errdefer path.deinit(allocator);
+
+            try path.append(allocator, to);
+            var id: u32 = e.prev;
+            while (id != from) {
+                try path.append(allocator, id);
+                id = visited_from.get(id).?;
+            }
+            try path.append(allocator, from);
+            std.mem.reverse(u32, path.items);
+
+            return .{ try path.toOwnedSlice(allocator), e.cost };
+        }
+        const gop = try visited_from.getOrPut(e.id);
+        if (gop.found_existing) continue;
+        gop.value_ptr.* = e.prev;
+
+        for (data[e.id].to[0..data[e.id].size]) |c| {
+            try pq.add(T{ .cost = e.cost + c.weight, .id = c.node, .prev = e.id });
+        }
+    }
+    return null;
+}
