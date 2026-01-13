@@ -20,22 +20,28 @@ const Row = struct {
 var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
 
 pub fn main() !void {
-    try create_graph();
+    var args = std.process.args();
+    _ = args.skip();
+    try create_graph(args.next() orelse return error.NoPathArgument);
 
-    inline for ([2]bool{ false, true }) |fib| {
-        const start_time = std.time.nanoTimestamp();
-        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
-            std.debug.print("no path :(\n", .{});
-            return;
-        };
-        defer std.heap.smp_allocator.free(path);
-        const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
-        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, run_time / 1_000_000 });
-    }
+    const heap_type = args.next() orelse return error.NoHeapTypeArgument;
+    const fib = if (std.ascii.eqlIgnoreCase(heap_type, "binary")) false else if (std.ascii.eqlIgnoreCase(heap_type, "fibonacci")) true else return error.InvalidHeapType;
+    const start = try std.fmt.parseInt(u32, args.next() orelse return error.NoFromArgument, 10);
+    const end = try std.fmt.parseInt(u32, args.next() orelse return error.NoToArgument, 10);
+    if(args.next())|_| return error.TooManyArguments;
+
+    const start_time = std.time.nanoTimestamp();
+    const res = if (!fib) try dijkstra(std.heap.smp_allocator, start, end) else return error.FibHeapNotImplemented; //try dijkstraFibo(std.heap.smp_allocator, start, end);
+    const cost = res orelse {
+        std.debug.print("no path :(\n", .{});
+        return;
+    };
+    const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    std.debug.print("cost:{d}\ntook:{}ms\n", .{ cost, run_time / 1_000_000 });
 }
 
-fn create_graph() !void {
-    const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
+fn create_graph(path: []const u8) !void {
+    const f: std.fs.File = try std.fs.cwd().openFile(path, .{});
     defer f.close();
     var reader_buffer: [4096]u8 = undefined;
     var reader: std.fs.File.Reader = f.reader(&reader_buffer);
@@ -62,7 +68,7 @@ fn create_graph() !void {
     std.debug.print("finished reading {}\n", .{read_time / 1_000_000});
 }
 
-pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?struct { []u32, f32 } {
+pub fn dijkstra(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     assert(from != to);
     const T = struct {
         cost: f32,
@@ -72,31 +78,18 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
             return std.math.order(a.cost, b.cost);
         }
     };
-    var pq: (if (fib) FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
+    var pq: std.PriorityQueue(T, void, T.compareFn) = .init(allocator, {});
     //defer pq.deinit();
-    var visited_from: std.AutoHashMap(u32, u32) = .init(allocator);
-    defer visited_from.deinit();
+    var was: std.AutoHashMap(u32, void) = .init(allocator);
+    defer was.deinit();
 
     try pq.add(.{ .cost = 0, .id = from, .prev = undefined });
-    while (if (fib) try pq.removeOrNull() else pq.removeOrNull()) |e| {
+    while (pq.removeOrNull()) |e| {
         if (e.id == to) {
-            var path: std.ArrayList(u32) = .empty;
-            errdefer path.deinit(allocator);
-
-            try path.append(allocator, to);
-            var id: u32 = e.prev;
-            while (id != from) {
-                try path.append(allocator, id);
-                id = visited_from.get(id).?;
-            }
-            try path.append(allocator, from);
-            std.mem.reverse(u32, path.items);
-
-            return .{ try path.toOwnedSlice(allocator), e.cost };
+            return e.cost;
         }
-        const gop = try visited_from.getOrPut(e.id);
+        const gop = try was.getOrPut(e.id);
         if (gop.found_existing) continue;
-        gop.value_ptr.* = e.prev;
 
         for (data[e.id].slice()) |c| {
             try pq.add(T{ .cost = e.cost + c.weight, .id = c.node, .prev = e.id });
@@ -105,7 +98,7 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
     return null;
 }
 
-pub fn dijkstraDecreaseKey(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
+pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     assert(from != to);
     const T = struct {
         cost: f32,
@@ -123,11 +116,11 @@ pub fn dijkstraDecreaseKey(allocator: std.mem.Allocator, from: u32, to: u32) !?f
     try pq.add(.{ .cost = 0, .id = from });
     while (try pq.removeOrNull()) |e| {
         if (e.id == to)
-            return .e.cost;
+            return e.cost;
 
         for (data[e.id].slice()) |c| {
             const cost = e.cost + c.weight;
-            if (node_ptrs.get(c)) |n| {
+            if (node_ptrs.get(c.node)) |n| {
                 if (n.key.cost > cost) {
                     n.key.cost = cost;
                     try pq.reduceKey(n);
