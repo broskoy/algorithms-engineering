@@ -4,7 +4,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
     return struct {
         const Self = @This();
 
-        const Node = struct {
+        pub const Node = struct {
             key: T,
             degree: usize = 0,
             parent: ?*Node = null,

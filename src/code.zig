@@ -1,4 +1,5 @@
 const std = @import("std");
+const FibonacciHeap = @import("fibonacci.zig").FibonacciHeap;
 const assert = std.debug.assert;
 
 const NUMBER_OF_NODES = 180000;
@@ -19,7 +20,7 @@ const Row = struct {
 var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
 
 pub fn main() !void {
-    const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
+    const f: std.fs.File = try std.fs.cwd().openFile("edges_fake.csv", .{});
     defer f.close();
     var reader_buffer: [4096]u8 = undefined;
     var reader: std.fs.File.Reader = f.reader(&reader_buffer);
@@ -47,7 +48,7 @@ pub fn main() !void {
 
     inline for ([2]bool{ false, true }) |fib| {
         start_time = std.time.nanoTimestamp();
-        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
+        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 0, 1) orelse {
             std.debug.print("no path :(\n", .{});
             return;
         };
@@ -67,7 +68,7 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
             return std.math.order(a.cost, b.cost);
         }
     };
-    var pq: (if (fib) @import("fibonacci.zig").FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
+    var pq: (if (fib) FibonacciHeap else std.PriorityQueue)(T, void, T.compareFn) = .init(allocator, {});
     //defer pq.deinit();
     var visited_from: std.AutoHashMap(u32, u32) = .init(allocator);
     defer visited_from.deinit();
@@ -95,6 +96,41 @@ pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to:
 
         for (data[e.id].slice()) |c| {
             try pq.add(T{ .cost = e.cost + c.weight, .id = c.node, .prev = e.id });
+        }
+    }
+    return null;
+}
+
+pub fn dijkstraDecreaseKey(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
+    assert(from != to);
+    const T = struct {
+        cost: f32,
+        id: u32,
+        fn compareFn(_: void, a: @This(), b: @This()) std.math.Order {
+            return std.math.order(a.cost, b.cost);
+        }
+    };
+    const F = FibonacciHeap(T, void, T.compareFn);
+    var pq: F = .init(allocator, {});
+    //defer pq.deinit();
+    var node_ptrs: std.AutoHashMap(u32, *F.Node) = .init(allocator);
+    defer node_ptrs.deinit();
+
+    try pq.add(.{ .cost = 0, .id = from });
+    while (try pq.removeOrNull()) |e| {
+        if (e.id == to)
+            return .e.cost;
+
+        for (data[e.id].slice()) |c| {
+            const cost = e.cost + c.weight;
+            if (node_ptrs.get(c)) |n| {
+                if (n.key.cost > cost) {
+                    n.key.cost = cost;
+                    try pq.reduceKey(n);
+                }
+            } else {
+                try pq.add(T{ .cost = cost, .id = c.node, .prev = e.id });
+            }
         }
     }
     return null;
