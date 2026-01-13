@@ -28,6 +28,7 @@ pub fn main() !void {
     const fib = if (std.ascii.eqlIgnoreCase(heap_type, "binary")) false else if (std.ascii.eqlIgnoreCase(heap_type, "fibonacci")) true else return error.InvalidHeapType;
     const start = try std.fmt.parseInt(u32, args.next() orelse return error.NoFromArgument, 10);
     const end = try std.fmt.parseInt(u32, args.next() orelse return error.NoToArgument, 10);
+    if(args.next())|_| return error.TooManyArguments;
 
     const start_time = std.time.nanoTimestamp();
     const res = if (!fib) try dijkstra(std.heap.smp_allocator, start, end) else return error.FibHeapNotImplemented; //try dijkstraFibo(std.heap.smp_allocator, start, end);
