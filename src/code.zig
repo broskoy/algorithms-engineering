@@ -3,31 +3,46 @@ const FibonacciHeap = @import("fibonacci.zig").FibonacciHeap;
 const assert = std.debug.assert;
 
 const NUMBER_OF_NODES = 180000;
-const MAX_EDGE_COUNT = 7;
+const MAX_DEGREE = 7;
 const Entry = struct { node: u32, weight: f32 };
 const Row = struct {
-    from: usize = 0,
-    to: [MAX_EDGE_COUNT]Entry = undefined,
+    size: u32 = 0,
+    to: [MAX_DEGREE]Entry = undefined,
     pub inline fn append(self: *@This(), entry: Entry) void {
-        self.to[self.from] = entry;
-        self.from += 1;
+        self.to[self.size] = entry;
+        self.size += 1;
     }
     pub inline fn slice(self: *@This()) []Entry {
-        return self.to[0..self.from];
+        return self.to[0..self.size];
     }
 };
 
 var data: [NUMBER_OF_NODES]Row = .{Row{}} ** NUMBER_OF_NODES;
 
 pub fn main() !void {
-    const f: std.fs.File = try std.fs.cwd().openFile("edges_fake.csv", .{});
+    try create_graph();
+
+    inline for ([2]bool{ false, true }) |fib| {
+        const start_time = std.time.nanoTimestamp();
+        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 100, 173000) orelse {
+            std.debug.print("no path :(\n", .{});
+            return;
+        };
+        defer std.heap.smp_allocator.free(path);
+        const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, run_time / 1_000_000 });
+    }
+}
+
+fn create_graph() !void {
+    const f: std.fs.File = try std.fs.cwd().openFile("edges.csv", .{});
     defer f.close();
     var reader_buffer: [4096]u8 = undefined;
     var reader: std.fs.File.Reader = f.reader(&reader_buffer);
     _ = try reader.interface.discardDelimiterInclusive('\n');
 
     std.debug.print("started reading\n", .{});
-    var start_time = std.time.nanoTimestamp();
+    const start_time = std.time.nanoTimestamp();
     while (true) {
         var string = reader.interface.peekDelimiterExclusive(',') catch |err| switch (err) {
             error.EndOfStream => break,
@@ -45,17 +60,6 @@ pub fn main() !void {
     }
     const read_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
     std.debug.print("finished reading {}\n", .{read_time / 1_000_000});
-
-    inline for ([2]bool{ false, true }) |fib| {
-        start_time = std.time.nanoTimestamp();
-        const path, const cost = try dijkstra(fib, std.heap.smp_allocator, 0, 1) orelse {
-            std.debug.print("no path :(\n", .{});
-            return;
-        };
-        defer std.heap.smp_allocator.free(path);
-        const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
-        std.debug.print("{any}\ncost:{d}\ntook:{}ms\n", .{ path, cost, run_time / 1_000_000 });
-    }
 }
 
 pub fn dijkstra(comptime fib: bool, allocator: std.mem.Allocator, from: u32, to: u32) !?struct { []u32, f32 } {
