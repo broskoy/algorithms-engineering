@@ -13,13 +13,6 @@ Dijkstra
 > implement nlogn
 
 
-Precompute (missing)
-> 
->
->
-> 
-
-
 Test Cases
 > add a list of start and end nodes
 > compiler settings
