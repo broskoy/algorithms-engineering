@@ -219,6 +219,38 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             }
         }
 
+        fn cut(self: *@This(), node: *Node) void {
+            if (node.parent.?.child == node) {
+                node.parent.?.child = if (node.right != node) node.right else null;
+            }
+            node.parent.?.degree -= 1;
+            node.parent = null;
+            node.left.right = node.right;
+            node.right.left = node.left;
+            self.addToRootList(node);
+        }
+
+        // called on a node when of its children is removed
+        fn cascadingCut(self: *@This(), node: *Node) void {
+            if (node.parent == null) return;
+            if (node.mark) {
+                const p = node.parent.?;
+                self.cut(node);
+                self.cascadingCut(p);
+            } else {
+                node.mark = true;
+            }
+        }
+
+        pub fn decreaseKey(self: *@This(), node: *Node) void {
+            const p = node.parent;
+            if (p != null and compare(self.context, p.?.key, node.key) == .gt) {
+                self.cut(node);
+                self.cascadingCut(p.?);
+            }
+            if (compare(self.context, node.key, self.min.?.key) != .gt) self.min = node;
+        }
+
         pub fn isEmpty(self: *Self) bool {
             return self.n == 0;
         }

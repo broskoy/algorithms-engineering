@@ -31,7 +31,7 @@ pub fn main() !void {
     if (args.next()) |_| return error.TooManyArguments;
 
     const start_time = std.time.nanoTimestamp();
-    const result_cost = if (!use_fibonacci_heap) try dijkstra(std.heap.smp_allocator, source_node, target_node) else return error.FibHeapNotImplemented; //try dijkstraFibo(std.heap.smp_allocator, start, end);
+    const result_cost = if (!use_fibonacci_heap) try dijkstra(std.heap.smp_allocator, source_node, target_node) else try dijkstraFibo(std.heap.smp_allocator, start, end);
     const shortest_path_cost = result_cost orelse {
         std.debug.print("no path :(\n", .{});
         return;
@@ -123,7 +123,7 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
             if (heap_nodes.get(edge.node)) |heap_node| {
                 if (heap_node.key.cost > new_cost) {
                     heap_node.key.cost = new_cost;
-                    try priority_queue.reduceKey(heap_node);
+                    priority_queue.decreaseKey(heap_node);
                 }
             } else {
                 try priority_queue.add(QueueNode{ .cost = new_cost, .id = edge.node, .prev = current.id });
