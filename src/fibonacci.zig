@@ -132,7 +132,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             self.n += 1;
         }
 
-        pub fn removeOrNull(self: *Self) !?T {
+        pub fn removeOrNull(self: *Self) ?T {
             const z = self.min orelse return null;
 
             // 1. Add z's children to the root list
@@ -152,7 +152,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                 self.min = null;
             } else {
                 self.min = z.right; // not necessarily the min, but that will be fixed
-                try self.consolidate();
+                self.consolidate();
             }
 
             self.n -= 1;
@@ -163,43 +163,38 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
         }
 
         /// Reduces to number of trees, until each root has a unique degree, self.min can point to any root before call, after it will point to the minimum
-        fn consolidate(self: *Self) !void {
-            if (self.min == null) return;
-            //MaxDEgree is floor(2*log(n))
+        fn consolidate(self: *Self) void {
+            if (self.min == null or self.min.?.left == self.min.?) return;
+            //MaxDegree is floor(2*log(n))
             var A: [MaxDegree]?*Node = .{null} ** MaxDegree;
-            var roots: std.ArrayList(*Node) = .empty;
-            defer roots.deinit(self.allocator);
 
-            {
-                var x = self.min.?;
-                while (true) {
-                    try roots.append(self.allocator, x);
-                    x = x.right;
-                    if (x == self.min.?) break;
-                }
-            }
-
+            // only visitied nodes are switched with other visited nodes so this should always be the last
+            const last = self.min.?.left;
             // Combine trees with the same degree
-            for (roots.items) |w| {
-                var x = w;
-                var d = x.degree;
+            var current_root = self.min.?;
+            while (true) {
+                const next_root = current_root.right;
+                var smaller = current_root;
+                var degree = smaller.degree;
 
-                while (A[d]) |w2| {
-                    var y = w2;
-                    if (compare(self.context, y.key, x.key) == .lt)
-                        std.mem.swap(*Node, &x, &y);
+                while (A[degree]) |other_root_with_same_degree| {
+                    var larger = other_root_with_same_degree;
+                    if (compare(self.context, larger.key, smaller.key) == .lt)
+                        std.mem.swap(*Node, &smaller, &larger);
 
-                    // Remove y from root list
-                    y.left.right = y.right;
-                    y.right.left = y.left;
+                    // Remove the larger from root list
+                    larger.left.right = larger.right;
+                    larger.right.left = larger.left;
 
-                    // Make y a child of x
-                    addChild(x, y);
+                    // Make larger a child of smaller
+                    addChild(smaller, larger);
 
-                    A[d] = null;
-                    d += 1;
+                    A[degree] = null;
+                    degree += 1;
                 }
-                A[d] = x;
+                A[degree] = smaller;
+                if (current_root == last) break;
+                current_root = next_root;
             }
 
             // Rebuild root list and find new min
@@ -227,34 +222,6 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
     };
 }
 
-// ------------------------
-// Example usage
-// ------------------------
-pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
-    const Heap = FibonacciHeap(i32, void, struct {
-        fn f(_: void, a: i32, b: i32) std.math.Order {
-            return std.math.order(a, b);
-        }
-    }.f);
-    var heap = Heap.init(allocator, {});
-    defer heap.deinit();
-
-    _ = try heap.add(15);
-    _ = try heap.add(21);
-    _ = try heap.add(3);
-    _ = try heap.add(9);
-    _ = try heap.add(6);
-
-    while (!heap.isEmpty()) {
-        const m = (try heap.removeOrNull()).?;
-        std.debug.print("Extracted: {d}\n", .{m});
-    }
-}
-
 test "extracts min in order (small)" {
     var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
     defer _ = gpa.deinit();
@@ -277,7 +244,7 @@ test "extracts min in order (small)" {
     const expected: [5]i32 = .{ 3, 6, 9, 15, 21 };
     var idx: usize = 0;
     while (!heap.isEmpty()) {
-        const m = (try heap.removeOrNull()).?;
+        const m = heap.removeOrNull().?;
         try std.testing.expectEqual(expected[idx], m);
         idx += 1;
     }
@@ -297,7 +264,7 @@ test "removeOrNull returns null on empty" {
     var heap = Heap.init(allocator, {});
     defer heap.deinit();
 
-    const res = try heap.removeOrNull();
+    const res = heap.removeOrNull();
     try std.testing.expect(res == null);
 }
 
@@ -321,7 +288,7 @@ test "descending inserts extract ascending 1..100" {
 
     var expected: i32 = 1;
     while (!heap.isEmpty()) {
-        const m = (try heap.removeOrNull()).?;
+        const m = heap.removeOrNull().?;
         try std.testing.expectEqual(expected, m);
         expected += 1;
     }

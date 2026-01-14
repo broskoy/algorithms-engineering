@@ -114,7 +114,7 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     defer node_ptrs.deinit();
 
     try pq.add(.{ .cost = 0, .id = from });
-    while (try pq.removeOrNull()) |e| {
+    while (pq.removeOrNull()) |e| {
         if (e.id == to)
             return e.cost;
 
