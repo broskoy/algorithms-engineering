@@ -31,7 +31,7 @@ pub fn main() !void {
     if (args.next()) |_| return error.TooManyArguments;
 
     const start_time = std.time.nanoTimestamp();
-    const result_cost = if (!use_fibonacci_heap) try dijkstra(std.heap.smp_allocator, source_node, target_node) else try dijkstraFibo(std.heap.smp_allocator, start, end);
+    const result_cost = if (!use_fibonacci_heap) try dijkstra(std.heap.smp_allocator, source_node, target_node) else try dijkstraFibo(std.heap.smp_allocator, source_node, target_node);
     const shortest_path_cost = result_cost orelse {
         std.debug.print("no path :(\n", .{});
         return;
@@ -79,7 +79,7 @@ pub fn dijkstra(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
         }
     };
     var priority_queue: std.PriorityQueue(QueueNode, void, QueueNode.compareFn) = .init(allocator, {});
-    defer pq.deinit();
+    defer priority_queue.deinit();
     var visited: std.AutoHashMap(u32, void) = .init(allocator);
     defer visited.deinit();
 
@@ -109,7 +109,7 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     };
     const F = FibonacciHeap(QueueNode, void, QueueNode.compareFn);
     var priority_queue: F = .init(allocator, {});
-    defer pq.deinit();
+    defer priority_queue.deinit();
     var heap_nodes: std.AutoHashMap(u32, *F.Node) = .init(allocator);
     defer heap_nodes.deinit();
 
@@ -126,7 +126,7 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
                     priority_queue.decreaseKey(heap_node);
                 }
             } else {
-                try priority_queue.add(QueueNode{ .cost = new_cost, .id = edge.node, .prev = current.id });
+                try priority_queue.add(QueueNode{ .cost = new_cost, .id = edge.node});
             }
         }
     }
