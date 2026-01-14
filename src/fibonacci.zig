@@ -7,6 +7,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
         pub const Node = struct {
             key: T,
             degree: usize = 0,
+            mark: bool = false,
             parent: ?*Node = null,
             child: ?*Node = null,
             left: *Node = undefined, // circular doubly linked list
@@ -82,6 +83,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             node.right = min;
             min.left.right = node;
             min.left = node;
+            node.mark = false;
         }
 
         fn addChild(parent: *Node, child: *Node) void {
@@ -100,6 +102,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             }
 
             parent.degree += 1;
+            child.mark = false;
         }
 
         pub fn add(self: *Self, key: T) !void {
