@@ -76,21 +76,6 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             } else return w.writeAll("<empty>\n");
         }
 
-        fn makeNode(self: *Self, key: T) !*Node {
-            const node = try self.allocator.create(Node);
-            node.* = .{
-                .key = key,
-                .degree = 0,
-                .parent = null,
-                .child = null,
-                .left = undefined,
-                .right = undefined,
-            };
-            node.left = node;
-            node.right = node;
-            return node;
-        }
-
         fn addToRootList(self: *Self, node: *Node) void {
             const min = self.min.?;
             node.left = min.left;
@@ -118,10 +103,19 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
         }
 
         pub fn add(self: *Self, key: T) !void {
-            const node = try self.makeNode(key);
-
+            const node = try self.allocator.create(Node);
+            node.* = .{
+                .key = key,
+                .degree = 0,
+                .parent = null,
+                .child = null,
+                .left = undefined,
+                .right = undefined,
+            };
             if (self.min == null) {
                 self.min = node;
+                node.left = node;
+                node.right = node;
             } else {
                 self.addToRootList(node);
                 if (compare(self.context, node.key, self.min.?.key) == .lt) {
