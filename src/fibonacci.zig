@@ -136,6 +136,12 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                 child_start.left = z.left;
                 z.left = child_end;
                 child_end.right = z;
+                var i = child_start;
+                while (true) {
+                    i.parent = null;
+                    if (i != child_end) break;
+                    i = i.right;
+                }
             }
 
             // 2. Remove z from root list

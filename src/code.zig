@@ -79,7 +79,7 @@ pub fn dijkstra(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
         }
     };
     var priority_queue: std.PriorityQueue(QueueNode, void, QueueNode.compareFn) = .init(allocator, {});
-    //defer pq.deinit();
+    defer pq.deinit();
     var visited: std.AutoHashMap(u32, void) = .init(allocator);
     defer visited.deinit();
 
@@ -109,7 +109,7 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     };
     const F = FibonacciHeap(QueueNode, void, QueueNode.compareFn);
     var priority_queue: F = .init(allocator, {});
-    //defer pq.deinit();
+    defer pq.deinit();
     var heap_nodes: std.AutoHashMap(u32, *F.Node) = .init(allocator);
     defer heap_nodes.deinit();
 
