@@ -31,7 +31,8 @@ var linked_graph: [MAX_NODES]std.SinglyLinkedList = .{std.SinglyLinkedList{}} **
 
 pub fn main() !void {
     const allocator = std.heap.smp_allocator;
-    var args = std.process.args();
+    var args: std.process.ArgIterator = try .initWithAllocator(allocator);
+    defer args.deinit();
     _ = args.skip();
     try create_graph(args.next() orelse return error.NoPathArgument, allocator);
 
