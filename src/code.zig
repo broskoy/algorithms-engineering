@@ -110,23 +110,27 @@ pub fn dijkstraFibo(allocator: std.mem.Allocator, from: u32, to: u32) !?f32 {
     const F = FibonacciHeap(QueueNode, void, QueueNode.compareFn);
     var priority_queue: F = .init(allocator, {});
     defer priority_queue.deinit();
-    var heap_nodes: std.AutoHashMap(u32, *F.Node) = .init(allocator);
+    var heap_nodes: std.AutoHashMap(u32, ?*F.Node) = .init(allocator); //null means already popped
     defer heap_nodes.deinit();
 
-    try priority_queue.add(.{ .cost = 0, .id = from });
+    try heap_nodes.putNoClobber(from, try priority_queue.add(.{ .cost = 0, .id = from }));
     while (priority_queue.removeOrNull()) |current| {
         if (current.id == to)
             return current.cost;
 
+        std.debug.assert(try heap_nodes.fetchPut(current.id, null) != null);
+
         for (graph[current.id].slice()) |edge| {
             const new_cost = current.cost + edge.weight;
-            if (heap_nodes.get(edge.node)) |heap_node| {
-                if (heap_node.key.cost > new_cost) {
-                    heap_node.key.cost = new_cost;
-                    priority_queue.decreaseKey(heap_node);
+            if (heap_nodes.get(edge.node)) |maybe_heap_node| { // has been added to the queue already
+                if (maybe_heap_node) |heap_node| { // hasn't been removed from queue yet
+                    if (heap_node.key.cost > new_cost) {
+                        heap_node.key.cost = new_cost;
+                        priority_queue.decreaseKey(heap_node);
+                    }
                 }
             } else {
-                try priority_queue.add(QueueNode{ .cost = new_cost, .id = edge.node});
+                try heap_nodes.putNoClobber(edge.node, try priority_queue.add(QueueNode{ .cost = new_cost, .id = edge.node }));
             }
         }
     }

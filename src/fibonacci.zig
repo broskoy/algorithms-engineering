@@ -104,7 +104,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             child.mark = false;
         }
 
-        pub fn add(self: *Self, key: T) !void {
+        pub fn add(self: *Self, key: T) !*Node {
             const node = try self.allocator.create(Node);
             node.* = .{
                 .key = key,
@@ -126,6 +126,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             }
 
             self.n += 1;
+            return node;
         }
 
         pub fn removeOrNull(self: *Self) ?T {
@@ -351,20 +352,20 @@ test "not emptied before deinit" {
     var heap: F = .init(allocator, {});
     defer heap.deinit();
 
-    try heap.add(.{ .cost = 0, .id = 1 });
+    _ = try heap.add(.{ .cost = 0, .id = 1 });
     try std.testing.expectEqualDeep(QueueNode{ .cost = 0, .id = 1 }, heap.removeOrNull());
-    try heap.add(.{ .cost = 0.34, .id = 0 });
-    try heap.add(.{ .cost = 0.26, .id = 2 });
+    _ = try heap.add(.{ .cost = 0.34, .id = 0 });
+    _ = try heap.add(.{ .cost = 0.26, .id = 2 });
     try std.testing.expectEqualDeep(QueueNode{ .cost = 0.26, .id = 2 }, heap.removeOrNull());
-    try heap.add(.{ .cost = 0.52, .id = 1 });
-    try heap.add(.{ .cost = 0.51, .id = 3 });
+    _ = try heap.add(.{ .cost = 0.52, .id = 1 });
+    _ = try heap.add(.{ .cost = 0.51, .id = 3 });
     try std.testing.expectEqualDeep(QueueNode{ .cost = 0.34, .id = 0 }, heap.removeOrNull());
-    try heap.add(.{ .cost = 0.68, .id = 1 });
-    try heap.add(.{ .cost = 0.69, .id = 86772 });
-    try heap.add(.{ .cost = 0.76, .id = 149221 });
+    _ = try heap.add(.{ .cost = 0.68, .id = 1 });
+    _ = try heap.add(.{ .cost = 0.69, .id = 86772 });
+    _ = try heap.add(.{ .cost = 0.76, .id = 149221 });
     try std.testing.expectEqualDeep(QueueNode{ .cost = 0.51, .id = 3 }, heap.removeOrNull());
-    try heap.add(.{ .cost = 0.76, .id = 2 });
-    try heap.add(.{ .cost = 0.68, .id = 149182 });
-    try heap.add(.{ .cost = 0.73, .id = 149254 });
+    _ = try heap.add(.{ .cost = 0.76, .id = 2 });
+    _ = try heap.add(.{ .cost = 0.68, .id = 149182 });
+    _ = try heap.add(.{ .cost = 0.73, .id = 149254 });
     try std.testing.expectEqualDeep(QueueNode{ .cost = 0.52, .id = 1 }, heap.removeOrNull());
 }
