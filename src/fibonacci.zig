@@ -33,6 +33,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             var n = self.min orelse return;
             while (true) {
                 if (n.child) |c| {
+                    n.child = null;
                     n = c;
                     continue;
                 }
@@ -48,14 +49,13 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
 
                 self.allocator.destroy(n);
                 n = v.parent orelse return;
-                continue;
             }
         }
 
         pub fn format_with_depth(self: *Node, w: *std.io.Writer, depth: usize) !void {
             try w.splatByteAll('\t', depth);
             if (self.child) |c| {
-                try w.print("{}: {{\n", .{self.key});
+                try w.print("{}({d}): {{\n", .{ self.key, self.degree });
 
                 try format_with_depth(c, w, depth + 1);
                 var cc = c.right;
@@ -65,7 +65,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
 
                 try w.splatByteAll('\t', depth);
                 try w.writeAll("}\n");
-            } else try w.print("{}\n", .{self.key});
+            } else try w.print("{}({d})\n", .{ self.key, self.degree });
         }
         pub fn format(self: @This(), w: *std.io.Writer) !void {
             if (self.min) |m| {
@@ -83,7 +83,6 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             node.right = min;
             min.left.right = node;
             min.left = node;
-            node.mark = false;
         }
 
         fn addChild(parent: *Node, child: *Node) void {
@@ -142,7 +141,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                 var i = child_start;
                 while (true) {
                     i.parent = null;
-                    if (i != child_end) break;
+                    if (i == child_end) break;
                     i = i.right;
                 }
             }
@@ -167,7 +166,8 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
 
         /// Reduces to number of trees, until each root has a unique degree, self.min can point to any root before call, after it will point to the minimum
         fn consolidate(self: *Self) void {
-            if (self.min == null or self.min.?.left == self.min.?) return;
+            std.debug.assert(self.min != null);
+            if (self.min.?.left == self.min.?) return;
             //MaxDegree is floor(2*log(n))
             var A: [MaxDegree]?*Node = .{null} ** MaxDegree;
 
@@ -176,6 +176,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             // Combine trees with the same degree
             var current_root = self.min.?;
             while (true) {
+                std.debug.assert(current_root.parent == null);
                 const next_root = current_root.right;
                 var smaller = current_root;
                 var degree = smaller.degree;
@@ -204,6 +205,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             self.min = null;
             for (A) |maybe_x| {
                 if (maybe_x) |x| {
+                    std.debug.assert(x.parent == null);
                     if (self.min) |min| {
                         self.addToRootList(x);
                         if (compare(self.context, x.key, min.key) == .lt) {
@@ -212,7 +214,6 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                     } else {
                         x.left = x;
                         x.right = x;
-                        x.parent = null;
                         self.min = x;
                     }
                 }
@@ -228,6 +229,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             node.left.right = node.right;
             node.right.left = node.left;
             self.addToRootList(node);
+            node.mark = false;
         }
 
         // called on a node when of its children is removed
@@ -248,7 +250,10 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                 self.cut(node);
                 self.cascadingCut(p.?);
             }
-            if (compare(self.context, node.key, self.min.?.key) != .gt) self.min = node;
+            if (compare(self.context, node.key, self.min.?.key) != .gt) {
+                std.debug.assert(node.parent == null);
+                self.min = node;
+            }
         }
 
         pub fn isEmpty(self: *Self) bool {
@@ -328,4 +333,38 @@ test "descending inserts extract ascending 1..100" {
         expected += 1;
     }
     try std.testing.expectEqual(101, expected);
+}
+
+test "not emptied before deinit" {
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    defer _ = gpa.deinit();
+
+    const allocator = gpa.allocator();
+    const QueueNode = struct {
+        cost: f32,
+        id: u32,
+        fn compareFn(_: void, a: @This(), b: @This()) std.math.Order {
+            return std.math.order(a.cost, b.cost);
+        }
+    };
+    const F = FibonacciHeap(QueueNode, void, QueueNode.compareFn);
+    var heap: F = .init(allocator, {});
+    defer heap.deinit();
+
+    try heap.add(.{ .cost = 0, .id = 1 });
+    try std.testing.expectEqualDeep(QueueNode{ .cost = 0, .id = 1 }, heap.removeOrNull());
+    try heap.add(.{ .cost = 0.34, .id = 0 });
+    try heap.add(.{ .cost = 0.26, .id = 2 });
+    try std.testing.expectEqualDeep(QueueNode{ .cost = 0.26, .id = 2 }, heap.removeOrNull());
+    try heap.add(.{ .cost = 0.52, .id = 1 });
+    try heap.add(.{ .cost = 0.51, .id = 3 });
+    try std.testing.expectEqualDeep(QueueNode{ .cost = 0.34, .id = 0 }, heap.removeOrNull());
+    try heap.add(.{ .cost = 0.68, .id = 1 });
+    try heap.add(.{ .cost = 0.69, .id = 86772 });
+    try heap.add(.{ .cost = 0.76, .id = 149221 });
+    try std.testing.expectEqualDeep(QueueNode{ .cost = 0.51, .id = 3 }, heap.removeOrNull());
+    try heap.add(.{ .cost = 0.76, .id = 2 });
+    try heap.add(.{ .cost = 0.68, .id = 149182 });
+    try heap.add(.{ .cost = 0.73, .id = 149254 });
+    try std.testing.expectEqualDeep(QueueNode{ .cost = 0.52, .id = 1 }, heap.removeOrNull());
 }
