@@ -142,6 +142,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
                 var i = child_start;
                 while (true) {
                     i.parent = null;
+                    i.mark = false;
                     if (i == child_end) break;
                     i = i.right;
                 }
@@ -178,6 +179,7 @@ pub fn FibonacciHeap(comptime T: type, comptime Context: type, comptime compare:
             var current_root = self.min.?;
             while (true) {
                 std.debug.assert(current_root.parent == null);
+                std.debug.assert(!current_root.mark);
                 const next_root = current_root.right;
                 var smaller = current_root;
                 var degree = smaller.degree;
