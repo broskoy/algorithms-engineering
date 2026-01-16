@@ -46,12 +46,14 @@ pub fn main() !void {
 
     const start_time = std.time.nanoTimestamp();
     const result_cost = if (!use_fibonacci_heap) try dijkstra(allocator, source_node, target_node, use_linked_list) else try dijkstraFibo(allocator, source_node, target_node, use_linked_list);
+
+    const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
+    std.debug.print("took:{}ms\n", .{run_time / 1_000_000});
     const shortest_path_cost = result_cost orelse {
         std.debug.print("no path :(\n", .{});
         return;
     };
-    const run_time: f32 = @floatFromInt(std.time.nanoTimestamp() - start_time);
-    std.debug.print("cost:{d}\ntook:{}ms\n", .{ shortest_path_cost, run_time / 1_000_000 });
+    std.debug.print("cost:{d}\n", .{shortest_path_cost});
 }
 
 fn create_graph(path: []const u8, alloc: std.mem.Allocator) !void {
